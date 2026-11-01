@@ -228,10 +228,3 @@ Voltage, capacity and cell count match exactly. The 1.6% energy gap probably com
 | 1C charge | Charged capacity (Ah) | 60.1 | 60 | -0.2% |
 
 The engine itself was also checked against hand calculations during development: a 1C discharge of a 2.5 Ah cell draws 2.5 A with matching throughput, CC-CV holds exactly 4.20 V and ends at the C/20 taper, a 4C adiabatic test aborts at 130 °C, steady-state delta-T of a forced-air run matches Q/(hA), and a 13S pack plateaus at 13 × 4.2 = 54.6 V.
-
-
-
-bun install
-bunx prisma generate
-bunx prisma db push
-bun run dev
