@@ -1,0 +1,242 @@
+     1→# Worklog
+     2→
+     3→---
+     4→Task ID: 1
+     5→Agent: main (Z.ai)
+     6→Task: Build "VoltLab" — a reusable digital platform website for designing battery energy systems (Case Study 2: IDV Battery Energy System)
+     7→
+     8→Work Log:
+     9→- Read case study PDF from /home/z/my-project/upload/ (problem: virtual battery design platform, cell→pack→system, trade-offs, traceability)
+    10→- Researched and verified engineering data via web search:
+    11→  * Samsung INR21700-40T (4Ah/3.6V/35A/68g, CC-CV 2A std 6A rated, 250 cyc)
+    12→  * LG INR18650-MJ1 (3.5Ah/3.635V/10A/49g, charge 0–45°C)
+    13→  * A123 ANR26650M1B LFP (2.5Ah/3.3V/6mΩ/50A/76g, >1000 cyc, 4C fast charge)
+    14→  * Samsung INR18650-25R (2.5Ah/3.6V/20A/45g/22mΩ)
+    15→  * 2025 prices: NMC cell $65.2/kWh, LFP $48.6/kWh (Benchmark Q3'25); NMC pack $128/kWh, LFP $81/kWh (BNEF)
+    16→  * Thermal: cp 884–1900 J/kgK (Iowa State 2023); h: natural ~8, forced ~35, liquid ~180 W/m²K; Nissan Leaf air-cooling case
+    17→- Initialized fullstack-dev skill environment (Next.js 16 + TS + Tailwind 4 + shadcn/ui)
+    18→- Built engineering model library:
+    19→  * src/lib/battery/data.ts — 4 datasheet-verified cells, 3 cooling options, 3 application scenarios, OCV polylines
+    20→  * src/lib/battery/model.ts — pack sizing, CC-CV charging sim (Euler dt=2s), lumped thermal node, hottest-cell non-uniformity, 8 safety checks, 7-criterion weighted scoring
+    21→  * src/lib/battery/store.ts — zustand persist for Baseline/OptionA/OptionB slots
+    22→- Built UI (single-page, 4 hash-routed tabs since only / is visible):
+    23→  * Overview (problem mapping, scope, workflow, cell library, cost benchmarks, criteria alignment)
+    24→  * Designer (configurator + live KPIs + charge chart + thermal map + safety checks + radar + save slots)
+    25→  * Compare (slot cards, best-in-row table, radar overlay, bar chart, auto recommendation with stated risks)
+    26→  * Traceability (R1–R8 live requirement verification, 10 assumptions, 8 sources, limitations, safety notes, next steps, model card)
+    27→- Fixed issues found during verification:
+    28→  * div-inside-p hydration error (SectionHeader)
+    29→  * NaN safety score (scores computed before failCount existed — reordered)
+    30→  * react-hooks/set-state-in-effect lint errors (switched to useSyncExternalStore + lazy initializers)
+    31→  * Traceability table overflow on mobile (table-fixed + min-w + horizontal scroll)
+    32→  * Header nav overflow on mobile (scrollable nav)
+    33→- Browser-verified end-to-end with agent-browser: all tabs, interactions (cell/cooling selects, sliders, save slots), trade-off demo (2C passive → 74.2°C FAIL vs liquid → 36°C pass), compare radar/recommendation, mobile 390px, zero console/hydration errors, lint clean
+    34→
+    35→Stage Summary:
+    36→- Deliverable: runnable Next.js 16 single-page app at / (VoltLab — Battery Energy System Design Studio)
+    37→- Key artifacts: src/lib/battery/{data,model,store}.ts, src/components/platform/{overview,designer,designer-results,compare,traceability,shared}.tsx, src/app/page.tsx
+    38→- Saved demo designs (in headless browser localStorage only): Baseline MJ1 10S4P passive 67/100, Option A 40T 10S4P forced 72/100, Option B A123 13S2P liquid 69/100
+    39→- User's fresh browser starts with empty compare slots; empty state guides the demo flow
+    40→- NOTE: This app was later superseded by BatteryLab (Task 2) — old files removed
+    41→
+    42→---
+    43→Task ID: 2
+    44→Agent: main (Z.ai)
+    45→Task: Build "BatteryLab" — Battery Design, Testing & Analysis System per user's problem statement: design battery → thermal testing → analysis + simulation + modeling + connection. Research first, then build.
+    46→
+    47→Work Log:
+    48→- Research phase (done BEFORE building, per user request):
+    49→  * ECM theory (Wikipedia/MathWorks): Rint/Thevenin/2RC models; state-space V=OCV(SOC)+IR0+ΣVc; coulomb counting SOC; RC branch ODEs
+    50→  * Bernardi heat generation eq + accuracy limits (Jindal 2022, Wu 2023, IEEE ICTEM 2025): Q=I(U−V)−IT(dU/dT), accurate <9C continuous
+    51→  * Thermal limits (Ebl/dragonfly/movitherm): charge 0–45°C, discharge ≤60°C, runaway onset ~130°C, peak 400–1000°C
+    52→  * HPPC procedure (Neware/MathWorks): 10s discharge pulse/40s rest/10s regen at 10% DOD steps, identifies R0/R1C1/R2C2
+    53→  * CC-CV stages (battery.mba/Keysight): CC to Vmax then CV taper to C/20
+    54→  * Series/parallel pack rules (batterydesign.net)
+    55→- Prisma schema: BatteryDesign (cell params + ECM + thermal + pack config) + TestRun (profile, params, summary JSON, downsampled series JSON); db pushed
+    56→- Physics engine src/lib/lab/engine.ts: OCV-SOC anchor tables for NMC/LFP/LTO/LCO with interpolation; 2RC Thevenin Euler sim (dt=1s); profiles: CC discharge, CC-CV (CV hold solve + C/20 taper), HPPC (2C pulse/40s rest/1.5C regen/1C 10% DOD ×10), urban drive cycle (cruise/accel/brake-regen/stop ×60); Bernardi thermal (I²R0+Vc1²/R1+Vc2²/R2+IT·dU/dT − hAΔT); trim series ≤400 pts; safety checks (C-rate, voltage window, 45/60/130°C thresholds, cooling, pack)
+    57→- CRITICAL FIX during dev: terminal voltage sign was inverted (discharge rose above OCV) → corrected to V=OCV−IR0−Vc1−Vc2 with discharge-positive current; removed Math.max(0,vc) clamp so charge polarization goes negative
+    58→- CRITICAL FIX: CV hold formula i=(ocv−vc1−vc2−vmax)/r0 (was overshooting to 4.56V)
+    59→- FIX: regen recovery metric threshold (was None for HPPC); drive cycle 40→60 cycles
+    60→- API routes: /api/designs GET/POST, /api/designs/[id] DELETE, /api/simulate POST (validates, runs engine, persists run, reuses identical design rows), /api/runs GET, /api/runs/[id] DELETE
+    61→- Frontend 6 workflow tabs (zustand store, emerald/teal theme, no blue/indigo):
+    62→  * Design: 4 chemistry preset cards, electrical/physical param editors, live KPIs (Wh, Wh/kg, 1C current, pack preview), save/load/delete library
+    63→  * Connection: S/P sliders + ± buttons, 4 voltage presets (12/24/48/400V), visual S×P cell grid, 8 pack KPI cards
+    64→  * Modeling: SVG 2RC circuit diagram, OCV-SOC chart, τ1/τ2/HF-impedance stats, editable R0/R1C1/R2C2, state-space explanation
+    65→  * Simulation: 4 profile cards (auto-set start SOC), C-rate/SOC/duration sliders, run → summary grid (12 stats) + 4 charts (V cell+pack with Vmin/Vmax refs, SOC, current, temp+heat) + CSV export + safety checks with PASS/WARN/FAIL badges
+    66→  * Thermal: 4 cooling presets (none/natural/forced/liquid) + h & ambient sliders, thermal verdict banner (safe/hot/overtemp/runaway), 4 stat cards, temp-vs-limits chart (45/60/130°C ref lines), Bernardi heat chart, recommendation box
+    67→  * Analysis: program KPIs (runs/energy/heat/peak temp/best recovery), test log with multi-select (≤4), energy & ΔT bar comparisons, voltage & temp overlays on normalized 0–100% duration axis, CSV export, delete
+    68→- UI bug fixes found via agent-browser: StatCard tone bg-red-50/amber-50 unreadable in dark mode → alpha-based bg-red-500/10; selected row bg-emerald-50 → emerald-500/10; checkbox double-toggle (input onChange + parent div onClick bubbling) → stopPropagation on input click; recharts per-Line data without shared dataset rendered flat → unified normalized overlay dataset via useMemo resample
+    69→- Data cleanup: wiped stale runs from buggy-physics era (one had impossible 638.7% recovery), seeded curated demo: 1 design "NMC 21700 EV Cell" 13S2P + 5 runs (1C forced air 27.2°C, 1C adiabatic 74°C, CC-CV, HPPC 4.4% recovery, drive 35°C 15.6% recovery)
+    70→- Removed dead code from superseded Task 1 app (src/components/platform, src/lib/battery) — fixed stale compile error
+    71→- Verified physics: discharge V sags below OCV ✓; CCCV clamps exactly 4.20V then tapers ✓; 4C adiabatic aborts at 130°C runaway ✓; forced-air ΔT=0.63K matches Q/(hA) ✓; pack 13S×4.2V=54.6V plateau ✓; drive regen recovery 15.7% ✓
+    72→- Browser-verified all 6 tabs, save/load design, run sims from UI, multi-select compare, delete run, mobile 390px (footer pushed naturally), zero console errors, lint clean
+    73→
+    74→Stage Summary:
+    75→- Deliverable: runnable Next.js 16 app at / — BatteryLab with full workflow Design→Connection→Modeling→Simulation→Thermal Test→Analysis
+    76→- Key artifacts: src/lib/lab/{engine,store}.ts, src/components/lab/{shared,design-tab,connection-tab,model-tab,simulate-tab,thermal-tab,analysis-tab}.tsx, src/app/api/{designs,simulate,runs}, prisma/schema.prisma (BatteryDesign+TestRun)
+    77→- DB state: 1 design (NMC 21700 EV Cell), 5 demo runs
+    78→- Engine: 2RC ECM + Bernardi thermal + 4 profiles, validated against hand calculations
+    79→
+    80→---
+    81→Task ID: 3
+    82→Agent: main (Z.ai)
+    83→Task: Per user's new requirement — "all the things will be designed by user, not a prebuilt method, and the user will get the help of AI to make the complete battery in real time" — transform BatteryLab from preset-driven to blank-sheet user-driven design with a real-time AI copilot.
+    84→
+    85→Work Log:
+    86→- Research (2 batches, done BEFORE building): pack design workflow (requirements -> cell -> S/P -> BMS -> thermal -> mechanical -> testing, eszoneo/HNF guides), thermal testing (HPPC 10s pulse/40s rest, ARC calorimetry, 45/60/130°C limits), ECM models (Rint/Thevenin/2RC/PNGV, MathWorks HPPC parameter estimation), electrochemical models (P2D/SPM), pack connection (busbar welding, cell matching <0.05V, BMS CMU+BMU), standards (UN38.3, IEC 62660)
+    87→- Engine (src/lib/lab/engine.ts): removed all CHEM_PRESETS; added blankDesign() (every field 0) + designIssues() validator (9 checks gating simulation); added "custom" profile with user-defined CustomSegment steps (mode discharge/charge/rest, C-rate magnitude, duration, max 40 steps); RC-branch guards (r/c <= 0 -> clean Rint fallback instead of NaN); new "Model order" safety check
+    88→- Store (src/lib/lab/store.ts): blank design + 1S1P start; copilot state (open/messages/busy) with sendCopilotMessage() injecting live context (design, issues, pack, simParams, lastResult); sanitizeAiPatch() + extractApplyPatch() for one-click AI value application
+    89→- New API /api/copilot: z-ai-web-dev-sdk chat, VoltAI system prompt (user-in-driver-seat philosophy, live state JSON, engineering cheat sheet, __apply JSON convention for one-click apply)
+    90→- New component copilot.tsx: floating launcher + Sheet panel on ALL tabs, context-aware quick chips, user/AI bubbles, parsed __apply badges + "Apply to my design" button, busy indicator
+    91→- Design tab rewritten: preset cards REMOVED -> blank-sheet fields, live completeness checklist ("9 to go" -> "complete"), 3 AI chips (guide/suggest/review), safe NumField (0 -> empty display)
+    92→- Simulation tab: "My Custom Sequence" as FIRST profile with full step builder (mode select, C-rate, duration, reorder, delete, live amp preview, total time) + design gate on run + copilot chip; C-rate slider hidden for custom profile
+    93→- Connection tab: removed 4 voltage presets -> user target-voltage helper (S = round(target/cell nominal) with apply) + copilot sizing chip
+    94→- Thermal tab: design gate + copilot cooling chip; Model tab: fixed V = OCV - I*R0 - Vc1 - Vc2 sign descriptions; page.tsx: hero + footer emphasize user-designed + real-time AI
+    95→- Verified end-to-end with agent-browser: blank checklist shows 9 issues; copilot conversation -> AI proposed e-bike NMC cell (10Ah/4.2/2.8/15mOhm/13S2P) -> Apply -> checklist "complete" -> Connection shows 13S2P layout -> custom 3-step sequence (2C dis 600s / rest 300s / 1C chg 600s) -> run OK (131.1 Wh pack, SOC 100->83.3%, regen 58.1%) -> thermal 1C adiabatic correctly aborts at 130°C runaway with recommendation banner -> Analysis stores 8 runs incl. custom -> mobile 390px copilot full-width OK -> zero console errors, lint clean
+    96→
+    97→Stage Summary:
+    98→- Deliverable: BatteryLab is now fully user-driven (no prebuilt methods anywhere) with VoltAI real-time copilot that guides, reviews, and can propose one-click-appliable parameter sets
+    99→- Key artifacts: src/app/api/copilot/route.ts, src/components/lab/copilot.tsx, rewritten design-tab.tsx + store.ts/engine.ts upgrades
+   100→- Physics validated again via runs: custom sequence + runaway abort at 130°C adiabatic
+   101→
+   102→---
+   103→Task ID: 4
+   104→Agent: main (Z.ai)
+   105→Task: Per user's latest requirements — (1) Design page must carry ALL inputs required to make a battery, (2) rich battery information from online across categories (Li-ion, NiCad, Lead-Acid & more) and brands (Samsung, Panasonic & others), (3) full datasheet for each battery, (4) design phase must simulate real-world conditions according to the datasheet.
+   106→
+   107→Work Log:
+   108→- Research (done BEFORE building, web searches): chemistry comparison table (EPEC: Lead-Acid/NiCd/NiMH/LCO/NMC/LFP energy density, IR, cycle life, cutoffs, temps); real cell datasheets — Samsung 25R/30Q/40T, Panasonic NCR18650B/GA, LG M50/MJ1, Molicel P42A, Murata VTC6, EVE LF280K/MB31, CATL 280Ah, A123 26650, Toshiba SCiB, Trojan T-105, Yuasa NP7-12, Odyssey PC680, Eneloop AA specs, Varta/Sanyo NiCd; ECM theory recap (Rint/Thevenin/2RC, coulomb counting); cell construction materials (cathode/anode/separator/electrolyte)
+   109→- Engine (src/lib/lab/engine.ts): Chemistry extended to 8 (added NCA, LeadAcid, NiMH, NiCd) with new OCV-SOC anchor tables (LeadAcid per 2V cell from SG+0.845 relation); CellDesign expanded to ~40 fields (identity/materials/formFactor/geometry/nominalV/pulse & std C-rates/cycle life/temp windows/self-discharge); blankDesign() covers all; helpers: loadedVoltageAtSoc, effectiveCapacityPct (datasheet-style capacity-vs-rate), tempRiseAdiabatic, jouleHeatW, estimateAreaM2, ocvScaleOf; packMath uses user nominalV
+   110→- CRITICAL FIX 1 — OCV scaling: lead-acid blocks are 3 series cells inside one unit (6V T-105); OCV tables are per-single-cell → added ocvScaleOf(design) = nominalV/base (base 3.6 NMC/NCA, 3.2 LFP, 2.3 LTO, 3.7 LCO, 2.0 PbAcid, 1.2 Ni) applied in simulate(), ocvCurve(), preview helpers
+   111→- CRITICAL FIX 2 — RC stability: explicit Euler diverged when tau1 < dt=1s (LF280K r0=0.25mΩ, c1=2000F → tau 0.2s → vMin 1.538V crash); replaced with EXACT exponential RC update vc' = vc·e^(−dt/tau) + iR(1−e^(−dt/tau)) — unconditionally stable for any user-entered RC
+   112→- Library database (src/lib/lab/library.ts NEW): 24 real batteries / 16 brands / 7 categories (Li-ion NMC/NCA ×9, LFP ×5, LTO, LCO, NiMH ×3, NiCd ×2, Lead-Acid ×3) with FULL datasheet fields (voltage window, capacity, energy, AC-IR, cont/pulse discharge, std/max charge, cycle life + condition, charge/discharge temp windows, dims, weight, self-discharge, standard charge protocol, Wh/kg, applications, features, engineering notes, source); cellToDesign() maps datasheet → editable design with chemistry-appropriate ECM estimates (tau1/tau2-derived capacitances) and surface area from dims
+   113→- Store: loadLibraryCell() action (datasheet = editable starting point, pack reset 1S1P); AI_DESIGN_KEYS/NUM_KEYS/STRING_KEYS extended to all new fields; chemistry list extended
+   114→- Prisma: BatteryDesign + ~20 nullable columns; db pushed; simulate API rowToDesign() full mapping; designs API stores all fields
+   115→- Design tab REWRITTEN: "Starting point" datasheet quick-picker (grouped by category) + blank sheet; input sections: Identity & materials (name/brand/model/chemistry×8/formFactor/cathode/anode/separator/electrolyte/application), Geometry & mass (diameter/length/width/height/thickness/mass-g + auto surface-area estimator), Electrical ratings (capacity/nominalV/vmax/vmin/R0/std-pulse-max charge C), Temperature & durability (4 temp bounds/cycles/self-discharge/note), Thermal model (Cp/area-cm²/dUdT); live KPIs; extended save/load library
+   116→- NEW Real-World Preview card (the "simulate real-world conditions per datasheet" requirement): sag @1C stat, I²R0 heat @maxC, adiabatic ΔT@30min, runtime @1C→Vmin; chart "Loaded voltage vs SOC" at 0.25/0.5/1/2/maxC with Vmin reference; chart "Usable capacity vs C-rate" (effectiveCapacityPct); all computed live from entered datasheet values
+   117→- NEW Cell Library tab (nav item after Analysis): search + category chips + brand chips; 24 cell cards; full 6-section datasheet dialog (General/Electrical/Physical/Thermal/Cycle life/Features+notes+source) with Load-into-Design (auto-switches tab)
+   118→- Copilot: system prompt knows the library (injects compact 24-cell summary), can recommend real cells; chips for library tab; allowed-keys list extended
+   119→- Verified engine via scripts/test-engine-extended.ts: Trojan 6S 1C → Vmin @31% SOC 41min (realistic PbA), 40T full discharge, Eneloop NiMH, LF280K 866Wh (crash fixed), CC-CV taper completes @4.2V, LCO derating 98% @1.25C
+   120→- Browser-verified (agent-browser): 40T load → all fields populated → save (201) → reload from DB with all fields; LF280K sim via API persisted (866.2Wh, ΔT 26.3K matches hand calc); library filters/search/datasheet dialog/load; Analysis shows 11 runs (junk test rows deleted, 9 remain); mobile 390px design+library+dialog; zero console errors after Select controlled-value fix; lint clean
+   121→- Fixed during verification: sag stat was showing loaded voltage (now OCV−loaded); Select uncontrolled→controlled warning (formFactor value always string); hero counts made dynamic (24 cells/16 brands)
+   122→
+   123→Stage Summary:
+   124→- Deliverable: BatteryLab now includes a 24-cell/16-brand/7-category datasheet library, a design page with ALL battery inputs (editable datasheet starting points), and live datasheet-driven real-world preview; engine supports 8 chemistries with block-level OCV scaling and exact RC integration
+   125→- Key artifacts: src/lib/lab/library.ts (NEW), src/components/lab/library-tab.tsx (NEW), rewritten design-tab.tsx, engine.ts (OCV scale + stability), store.ts, api/{designs,simulate}, prisma schema
+   126→- DB state: 4 saved designs (incl. "Samsung SDI INR21700-40T" full-datasheet example), 9 test runs
+   127→
+   128→---
+   129→Task ID: 5
+   130→Agent: main (Z.ai)
+   131→Task: Post-requirement verification pass — validate the full app against the user's latest requirements (all design inputs, multi-chemistry/brand battery library with full datasheets, datasheet-driven real-world simulation), re-run research, fix found bugs, and deliver.
+   132→
+   133→Work Log:
+   134→- Re-ran research (web searches): confirmed chemistry data used by the app matches current sources (NMC 3.6–3.7V/150-220Wh/kg/210°C runaway, LFP 3.2V/2000+ cycles/270°C, LTO 2.4V safest, NiMH 46-120Wh/kg, plus real Samsung 25R datasheet figures: 2500mAh min/2450mAh @10A, 20A cont, 4A CC-CV 4.2V, 0–45°C charge window, 45g, flat top)
+   135→- Found & fixed 2 engine robustness bugs via API smoke test:
+   136→  * buildSegments() had no default case → unknown profile name crashed simulate() with 500 ("Cannot read properties of undefined (reading 'length')") → added default fallback to CC discharge
+   137→  * summary.socStart used raw params.socStart (UI sends 0–1 fraction; out-of-range inputs showed e.g. 10000) → normalized via socStartIn (accepts 0–1 and 0–100)
+   138→- Cleaned 2 SmokeTest designs + related runs from DB created during smoke testing
+   139→- Browser-verified end-to-end (agent-browser): Design page (datasheet quick-picker lists all 24 cells; Samsung 40T load → all fields populated + toast; Real-World Preview renders loaded-voltage-vs-SOC curves at 0.25–8.75C with Vmin ref + usable-capacity-vs-C-rate derating ~99.5% @ max C), Cell Library (category chips NMC/NCA·LFP·LTO·LCO·NiMH·NiCd·Lead-Acid, 16 brand chips, "3 of 24" filter count, Trojan T-105 full datasheet dialog with General/Electrical sections + notes + source), Simulation (ran 1C CC discharge of 40T from UI: 3.96Ah/14.7Wh/100→1% SOC/59min/47.2°C adiabatic — physically consistent), Connection/Modeling/Thermal/Analysis headings render, VoltAI copilot opens with input
+   140→- Physics re-validated via scripts/test-engine-extended.ts: Trojan 6V block cutoff at 5.25V (3 cells × 1.75V), 40T full discharge, Eneloop NiMH, LF280K 866.2Wh, CC-CV taper completes exactly at 4.2V, LCO 98% usable @1.25C
+   141→- Zero page errors, zero console warnings, lint clean
+   142→
+   143→Stage Summary:
+   144→- App state: DELIVERABLE — all user requirements verified working end-to-end
+   145→- Engine hardened (unknown-profile fallback + SOC normalization); DB clean (4 saved designs, demo runs intact)
+   146→- 24-cell/16-brand/7-category library, full datasheets, complete design inputs, datasheet-driven real-world preview, AI copilot — all confirmed in browser
+   147→
+   148→---
+   149→Task ID: 6
+   150→Agent: main (Z.ai)
+   151→Task: Post-context-reset final verification pass — re-validate all user requirements (all design inputs, multi-chemistry/brand library with full datasheets, datasheet-driven real-world simulation, AI real-time copilot), fix bugs found, deliver.
+   152→
+   153→Work Log:
+   154→- Re-confirmed research data (worklog Tasks 4-5): Samsung 25R/30Q/40T/50E, Panasonic NCR18650B/GA, LG HG2/MJ1/M50, Murata VTC6, Molicel P42A, EVE LF280K/MB31, CATL 280Ah, A123 26650, Trojan T-105, chemistry comparison (NMC/LFP/LTO/LCO/NCA/LeadAcid/NiMH/NiCd), ECM theory (2RC Thevenin + coulomb counting + Bernardi heat)
+   155→- App state on resume: server running (HTTP 200), DB intact (4 designs, 13 runs), 26-cell library intact, lint clean
+   156→- Browser-verified Cell Library: category chips (NMC/NCA, LFP, LTO, LCO, NiMH, NiCd, Lead-Acid) + 16 brand chips + search; full datasheet dialogs for Samsung INR21700-40T (6 sections incl. cycle life 250 cyc @6A/35A, features, source) and Trojan T-105 (6V/225Ah/7.05V/5.25V, 3-cell block) — all values match researched datasheets
+   157→- BUG FOUND & FIXED 1 — Real-World Preview sag showed 44000 mV (should be 44 mV): double ×1000 in design-tab.tsx (sag1C already in mV, StatCard multiplied again); then root-caused second inconsistency: sag formula compared un-scaled ocvSoc() vs ocvScaleOf()-scaled loadedVoltageAtSoc() (legacy designs with nominalV=null → fallback (vmax+vmin)/2+0.05=3.4V → scale 0.9444 → 253 mV). Final fix: sag = I·R0 (physically exact, SOC- and scale-independent); label renamed "Sag @1C (ohmic)"; unused ocvSoc import removed
+   158→- BUG FOUND & FIXED 2 — loadSavedDesign in Design tab restored only 8 of ~40 fields (nominalV, max C-rates, geometry, thermal params, cycle life, temp windows all dropped on load). Expanded SavedDesign interface to full schema + load() now restores every field; toast updated to "all saved values restored". Verified: 40T load → nominalV 3.6, maxDischargeC 8.75 (=35A/4Ah), maxChargeC 1.5, mass 0.0668, area 54cm², checklist "complete" immediately
+   159→- BUG FOUND & FIXED 3 — Connection target-voltage helper used (vmax+vmin)/2+0.05 instead of design.nominalV ("cell nominal = 3.40 V" for a 3.6V cell); now prefers user nominal with same fallback as engine → shows 3.60 V
+   160→- Data cleanup: legacy designs (E-bike NMC, NMC 21700 EV Cell) had nominalV=NULL → updated to 3.6
+   161→- End-to-end browser verification: design gate correctly blocks incomplete design (mass/Cp/area/max C-rates); after completion 1C CC discharge of 5S4P 40T → 3.96Ah/13.9Wh/279Wh pack/ΔT +9.2K (matches hand calc m·Cp: 0.176W×3600s/68J/K=9.3K)/59min; final run on 10S3P → 439.9Wh pack, ΔT +22.2K incl. RC polarization heat 0.41Wh (consistent with r1+r2 added)
+   162→- AI Copilot verified live: asked 36V/10Ah e-bike sizing → VoltAI answered 10S3P (36V÷3.6=10S, 10Ah÷4Ah→3P, 432Wh, 30 cells) with __apply patch badge + "Apply to my design" → clicked → pack instantly updated to 36V/42V/25V/12Ah/432Wh (all correct)
+   163→- Thermal Test tab: verdict PASS — SAFE BAND, peak 34.2°C/ΔT 9.2K/heat wasted 1%; Modeling tab: 2RC SVG circuit, τ1 12s/τ2 250s/HF 11.8mΩ, editable params, state-space text
+   164→- Mobile 390px: circuit SVG, charts, params all render; footer pushes naturally
+   165→- Final: zero console errors, zero page errors, POST /api/simulate 200, lint clean
+   166→
+   167→Stage Summary:
+   168→- App state: DELIVERABLE — all user requirements verified working after bug fixes
+   169→- Fixes shipped: sag unit/scale bug (I·R0 formula), full-field design load (was dropping 30+ fields), connection helper nominal voltage
+   170→- Physics validated by hand calcs on two runs; AI one-click apply loop verified end-to-end
+   171→
+   172→---
+   173→Task ID: 7
+   174→Agent: main (Z.ai)
+   175→Task: Post-context-continuation final pass — re-validate all requirements, fix bugs found, clean DB, deliver.
+   176→
+   177→Work Log:
+   178→- Determined from worklog that app was already fully built (Tasks 1-6); stale continuation summary claimed research not started — worklog is authoritative
+   179→- Health checks: dev server 200, lint clean, DB intact, APIs returning data
+   180→- Browser smoke test: home, Design (all inputs + Real-World Preview), Cell Library (24 cells/16 brands/7 categories), 40T datasheet dialog (all 6 sections), simulation run
+   181→- BUG FOUND & FIXED — "Use in Design" card button loaded datasheet but never switched to Design tab (dialog's "Load into Design" did; card button didn't): added setActiveTab("design") to CellCard handler in library-tab.tsx; browser-verified tab now switches
+   182→- Simulation physics re-validated: 1S1P 40T @1C → 3.96Ah / 14.66Wh / 59.4min / ΔT +22.2K — heat 0.41Wh ÷ (66.8g × 1000J/kgK) = 22.1K exact match; entropic term explains 0.11W gap between ohmic+RC (0.3W) and measured 0.41W
+   183→- Investigated 5 mystery runs @09:04-09:05 (CCCV + 3 thermal presets + discharge on a "25R-as-LTO" design): traced to previous session's final verification clicks (no auto-run effects exist in code — checked thermal/simulate/analysis tabs)
+   184→- DB cleanup: deleted junk "Samsung SDI INR18650-25R" chemistry=LTO test design + its 5 runs; DB now 5 legit designs, 15 runs
+   185→- Note: initial design DELETE used truncated id → Prisma "record not found"; retried with full cuid → 200 OK (not an app bug)
+   186→- AI copilot live test: asked 36V/10Ah e-bike sizing → context-aware answer citing library cells (40T, LG MJ1 10S3P = 10.5Ah) with __apply patch + "Apply to my design" button present
+   187→- Mobile 390px: 7/7 nav buttons visible, no horizontal overflow; zero console errors, zero page errors; lint clean after edit
+   188→
+   189→Stage Summary:
+   190→- App state: DELIVERABLE — all user requirements verified working after 1 UX fix (Use in Design tab switch)
+   191→- DB clean: 5 designs (3× 40T variants, E-bike NMC, NMC 21700 EV Cell), 15 runs
+   192→- No open issues; project ready for user
+   193→
+   194→---
+   195→Task ID: 8
+   196→Agent: main (Z.ai)
+   197→Task: Per user feedback — "make this a professional website, colours not correct, lot of text not required; everything else correct, just UI/UX wrong" — full professional UI/UX redesign keeping all functionality.
+   198→
+   199→Work Log:
+   200→- Root cause: app was dark-navy + mint-emerald theme with long explanatory paragraphs on every page — read as unprofessional and text-heavy
+   201→- New design system: light professional engineering theme — background #f4f5f7, white cards, steel-blue primary #1e5a96 (7:1 contrast on white), neutral slate grays; color reserved: blue=interactive/brand, green/amber/red=status only
+   202→- globals.css: rewrote theme tokens (removed dark theme, light scrollbars, radius 0.5rem)
+   203→- page.tsx: REMOVED the entire hero text card (~15 lines of marketing copy + 6 feature bullets); header → compact segmented control nav (bg-muted container, active = primary pill, chevrons removed, "Thermal" shortened); footer → single line
+   204→- shared.tsx: SectionTitle compact (15px title, 13px one-line desc), StatCard tightened (10px labels, lg values), StatusBadge outlined semantic (PASS green/WARN amber/FAIL red), CHART_COLORS → professional palette (blue/cyan/amber/red/slate/violet keys renamed from emerald/teal)
+   205→- design-tab: section desc 3 sentences → 1; starting-point helper 3 lines → 1; checklist headline shortened + "Next:" paragraph deleted; 4 AI chips emerald pills → neutral bordered chips; 1C helper → "1C ≈ x A"; thermal hint + surface-area paragraph compressed; Real-World Preview title/desc/bottom-note shortened (removed 2 long paragraphs); all emerald → primary
+   206→- connection-tab: desc 2 sentences → 1; S/P badges primary/slate; "Rules of connection" paragraph → single formulas line; pack cells + legend blue; helper math compressed to one line
+   207→- model-tab: desc compressed to equation; SVG circuit recolored (R0/OCV blue, R1/C1 cyan, R2/C2 slate — was green/teal/yellow); state-space box compressed; param card desc shortened
+   208→- simulate-tab: profile selected state emerald → primary ring; slider values emerald → neutral semibold; step-builder texts shortened; run button primary; chart strokes blue/cyan
+   209→- thermal-tab: desc 2 sentences → 1; preset selected emerald → primary; Bernardi box → one-line formula; overheating recommendation shortened; verdict banner kept semantic green/amber/red
+   210→- analysis-tab: desc shortened; selected row/checkbox emerald → primary; profile badge colors + bars remapped to new palette
+   211→- library-tab: intro 4 lines → 1 line with counts; category badges → muted professional tints (blue/cyan/violet/amber/teal/orange/slate at 10%); filter chips + Use-in-Design + Load-into-Design buttons → primary; datasheet section headers emerald → muted; cycle-life figure → neutral foreground
+   212→- copilot.tsx: launcher gradient emerald-teal → solid primary (ping dot green); header gradient → primary square; welcome message 4 lines → 2; user bubble + send + apply button → primary
+   213→- Verification: lint clean; browser screenshots of all 7 tabs (light theme consistent, zero console/page errors); 40T loaded → 1C sim run OK (3.96Ah/14.7Wh/59min — physics unchanged); mobile 390px no overflow, nav scrolls; fixed section-desc truncate → wrap for mobile
+   214→
+   215→Stage Summary:
+   216→- Deliverable: BatteryLab restyled as a professional light engineering tool — steel-blue primary, semantic-only status colors, ~60% less prose on screen; all six modules + library + copilot functionally untouched and re-verified
+   217→- Key artifacts touched: globals.css, page.tsx, shared.tsx, all 7 lab tab components, copilot.tsx
+   218→- No engine/API/DB changes; simulation physics unchanged
+   219→
+   220→---
+   221→Task ID: 9
+   222→Agent: main (Z.ai)
+   223→Task: User request — "after I set the design for the battery then I will load the battery to the connection; how many cells I will connect should be loaded by the design, and in connection I will connect the battery like the schematic connections." Design targets must drive the Connection cell count, and Connection must become a real schematic connection builder.
+   224→
+   225→Work Log:
+   226→- store.ts: added PackUIState (extends PackConfig with targetV/targetAh) + blankPack(); resetDesign/loadLibraryCell reset targets; setPack accepts Partial<PackUIState>
+   227→- design-tab.tsx: new full-width "Pack target" card after the input grid — Target pack voltage (V) + Target pack capacity (Ah) inputs; live-computes S = round(V ÷ cell nominal), P = ⌈Ah ÷ cell Ah⌉ and applies setPack({series, parallel}) on every keystroke, so the cell count is loaded from the design; result box shows "10S3P · 30 cells — live in Connection"; NumField gained placeholder prop
+   228→- connection-tab.tsx: rewritten visual as an interactive SVG schematic builder (PackSchematic component):
+   229→  * stage machine 0→3: cells placed (from design) → Connect parallel (bus bars per group) → Connect series (zigzag links, alternating group polarity like a real schematic) → Terminals + BMS (+ red terminal with pack Vmax, − slate terminal, BMS box with dashed taps); "Connect all" + "Rebuild" + stepper pills
+   230→  * stage derived from {stage, s, p} state — changing S/P invalidates the drawn connection (no effect-setState; lint-clean react-hooks)
+   231→  * layout: MAX 10 groups / 6 cells drawn with dashed "+N" compression markers; large packs horizontally scrollable; fade-in transitions per stage; "Pack connected" badge + "Open Simulation →" shortcut when complete
+   232→  * config card: "From your design: 36 V · 12 Ah → 10S3P" chip with Re-apply button when sliders drift from design targets
+   233→- design-tab load(): saved-design load now also clears stale targetV/targetAh (S/P restored from DB seriesCount/parallelCount as before)
+   234→- BUG FIXED (mobile): grids with only lg:grid-cols-N had no base grid-cols → implicit auto track sized to SVG max-content → 1022px page overflow at 390px; added grid-cols-1 base to all responsive grids in all 7 lab tabs
+   235→- Browser E2E verified: 40T datasheet → targets 36V/12Ah → "10S3P · 30 cells" live → Connection pre-loads 10S3P + chip → Connect parallel/series/terminals → Pack connected + circuit complete + BMS/t terminals render (screenshots) → Open Simulation → 10S4P run OK (59 min, checks render) → saved-design load restores 5S4P without stale chip → stage resets on S/P change → mobile 390px overflowX=0 with internal SVG scroll
+   236→- lint clean, zero console/page errors; engine/API/DB untouched
+   237→
+   238→Stage Summary:
+   239→- Deliverable: Design → Connection workflow now matches the user's requested flow — pack targets set in Design automatically load the cell count into Connection, and Connection is a step-by-step schematic connection builder (cells → parallel bus bars → series links → terminals + BMS)
+   240→- Key artifacts: store.ts (PackUIState), design-tab.tsx (Pack target card), connection-tab.tsx (PackSchematic SVG builder), grid-cols-1 base fix across lab tabs
+   241→- No changes to engine physics, APIs, or DB schema
+   242→

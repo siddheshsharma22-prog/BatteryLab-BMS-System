@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1480px;
+    font-family: 'Helvetica Neue', Arial, 'Noto Sans SC', sans-serif;
+    background: #ffffff;
+    padding: 28px 30px;
+  }
+  .band {
+    border: 1.5px solid #c0d0e2;
+    border-radius: 10px;
+    background: #f5f8fc;
+    padding: 16px 20px 18px;
+    position: relative;
+  }
+  .band + .band { margin-top: 46px; }
+  .band-label {
+    position: absolute;
+    top: -13px;
+    left: 18px;
+    background: #1a4a7a;
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    padding: 4px 14px;
+    border-radius: 6px;
+  }
+  .band-sub { font-size: 13px; color: #5a7a96; margin: 8px 0 12px 2px; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; max-width: 100%; }
+  .node {
+    flex: 1 1 auto;
+    min-width: 150px;
+    max-width: 100%;
+    background: #e4ecf5;
+    border: 1.4px solid #2d7ab3;
+    border-radius: 8px;
+    padding: 10px 12px;
+    overflow-wrap: break-word;
+  }
+  .node.alt { background: #eef3fa; border-color: #1a4a7a; }
+  .node h4 { font-size: 16px; color: #142840; margin-bottom: 4px; font-weight: 700; }
+  .node p { font-size: 13px; color: #3f5a74; line-height: 1.45; }
+  .node .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2d7ab3;
+    letter-spacing: 1px;
+    margin-bottom: 3px;
+  }
+  .conn {
+    display: flex;
+    justify-content: center;
+    gap: 190px;
+    height: 46px;
+    align-items: center;
+  }
+  .arrow { position: relative; width: 2px; height: 34px; background: #2d7ab3; }
+  .arrow::after {
+    content: '';
+    position: absolute;
+    bottom: -1px; left: -4px;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 8px solid #2d7ab3;
+  }
+  .arrow.up::after { display: none; }
+  .arrow.up::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: -4px;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 8px solid #2d7ab3;
+  }
+  .conn .lbl {
+    font-size: 12.5px;
+    color: #1a4a7a;
+    font-weight: 600;
+    background: #ffffff;
+    border: 1px solid #c0d0e2;
+    border-radius: 20px;
+    padding: 3px 12px;
+  }
+</style>
+</head>
+<body>
+  <div class="band">
+    <div class="band-label">CLIENT &middot; BROWSER (React 19 SPA)</div>
+    <div class="band-sub">Next.js 16 App Router page.tsx &mdash; single-route workspace, everything client-side interactive</div>
+    <div class="row">
+      <div class="node"><span class="tag">WIZARD</span><h4>7 workflow tabs</h4><p>Design &middot; Connection &middot; Modeling &middot; Simulation &middot; Thermal &middot; Monitor &middot; Analysis &mdash; completion checkmarks + gated Next</p></div>
+      <div class="node"><span class="tag">UI</span><h4>Library &amp; theme</h4><p>24-cell datasheet browser, dark / light toggle, animated design system</p></div>
+      <div class="node"><span class="tag">STATE</span><h4>zustand store</h4><p>design (44 fields) &middot; pack S&times;P &middot; sim params &middot; lastResult &middot; build stage &middot; copilot</p></div>
+      <div class="node alt"><span class="tag">3D</span><h4>react-three-fiber</h4><p>PackViewer3D, thermal 3D field, test-bench SVG animation (Simulation)</p></div>
+      <div class="node alt"><span class="tag">SERIAL</span><h4>Web Serial API</h4><p>Direct browser link to a real BMS over CAN / RS485 / UART &mdash; no server hop</p></div>
+    </div>
+  </div>
+
+  <div class="conn">
+    <div class="arrow up"></div>
+    <div class="lbl">fetch JSON</div>
+    <div class="arrow"></div>
+  </div>
+
+  <div class="band">
+    <div class="band-label">SERVER &middot; NEXT.JS API ROUTES (Node runtime)</div>
+    <div class="band-sub">src/app/api/* &mdash; thin, validated endpoints; all physics in the shared lib layer</div>
+    <div class="row">
+      <div class="node"><span class="tag">POST /api/simulate</span><h4>Simulation runner</h4><p>Validates input, calls engine, persists run, deduplicates identical design rows</p></div>
+      <div class="node"><span class="tag">GET/POST /api/designs</span><h4>Design library CRUD</h4><p>Persists all 44 datasheet fields; [id] route deletes</p></div>
+      <div class="node"><span class="tag">GET /api/runs</span><h4>Test-run log</h4><p>Stored runs with summary + downsampled series JSON; [id] deletes</p></div>
+      <div class="node alt"><span class="tag">POST /api/copilot</span><h4>VoltAI bridge</h4><p>Injects live state snapshot, returns reply + __apply patch block</p></div>
+      <div class="node alt"><span class="tag">LIB</span><h4>Physics engine</h4><p>src/lib/lab/engine.ts &mdash; 2RC ECM, Bernardi heat, 4+1 profiles, safety checks</p></div>
+    </div>
+  </div>
+
+  <div class="conn">
+    <div class="arrow up"></div>
+    <div class="lbl">Prisma client</div>
+    <div class="arrow"></div>
+  </div>
+
+  <div class="band">
+    <div class="band-label">PERSISTENCE &amp; EXTERNAL SERVICES</div>
+    <div class="band-sub">SQLite file database via Prisma ORM; LLM service; hardware bench</div>
+    <div class="row">
+      <div class="node"><span class="tag">db/custom.db</span><h4>SQLite + Prisma 6</h4><p>BatteryDesign (44 cols) 1&mdash;N TestRun (summary + series JSON, cascade delete)</p></div>
+      <div class="node alt"><span class="tag">SDK</span><h4>z-ai-web-dev-sdk</h4><p>Chat completions behind /api/copilot (server-side key, 6 KB context cap)</p></div>
+      <div class="node alt"><span class="tag">HARDWARE</span><h4>Real BMS bench</h4><p>USB-CAN / RS485 / UART adapters expose a COM port to the browser</p></div>
+    </div>
+  </div>
+</body>
+</html>

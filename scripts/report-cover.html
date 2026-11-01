@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700;900&family=Noto+Serif+SC:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    @page { size: 794px 1123px; margin: 0; }
+    :root {
+      --c-bg: #0a1628;
+      --c-accent: #4da8da;
+      --c-text: #e8f0f8;
+      --c-muted: #7a9bb8;
+      --c-glow: #2d7ab3;
+    }
+    html, body {
+      margin: 0; padding: 0;
+      width: 794px; height: 1123px;
+      background: var(--c-bg);
+      color: var(--c-text);
+      font-family: 'Inter', 'Noto Sans SC', 'Helvetica Neue', sans-serif;
+    }
+    @media screen {
+      html { height: auto; display: flex; justify-content: center; min-height: 100vh; background: var(--c-bg); }
+      body { transform-origin: top center; scale: min(1, calc(100vw / 794), calc(100vh / 1123)); margin: 0 auto; box-shadow: 0 0 60px rgba(0,0,0,0.3); }
+    }
+    .cover { width: 794px; height: 1123px; position: relative; box-sizing: border-box; }
+
+    /* Layer 1 - background glow (clipped) */
+    .layer-bg {
+      position: absolute; inset: 0;
+      overflow: hidden;
+      z-index: 1;
+    }
+    .glow-a {
+      position: absolute; left: 0; top: 0;
+      width: 100%; height: 60%;
+      background: radial-gradient(circle at 18% 12%, rgba(45, 122, 179, 0.10) 0%, rgba(45, 122, 179, 0) 55%);
+    }
+    .glow-b {
+      position: absolute; left: 0; bottom: 0;
+      width: 100%; height: 65%;
+      background: radial-gradient(circle at 85% 88%, rgba(77, 168, 218, 0.08) 0%, rgba(77, 168, 218, 0) 52%);
+    }
+
+    /* Layer 2 - luminous frame */
+    .layer-frame { position: absolute; inset: 0; z-index: 2; }
+    .frame {
+      position: absolute;
+      left: 60px; right: 60px; top: 80px; bottom: 80px;
+      border: 2px solid var(--c-accent);
+    }
+
+    /* Layer 3 - content */
+    .layer-content { position: absolute; inset: 0; z-index: 3; }
+    .kicker {
+      position: absolute; left: 120px; top: 135px;
+      font-size: 11pt; font-weight: 300;
+      color: var(--c-accent);
+      letter-spacing: 5px;
+      text-transform: uppercase;
+    }
+    .hero {
+      position: absolute; left: 120px; top: 236px;
+      font-family: 'Noto Serif SC', 'Inter', 'Georgia', serif;
+      font-size: 36pt; font-weight: 900;
+      line-height: 1.15;
+      color: var(--c-text);
+      max-width: 580px;
+      text-shadow: 0 0 28px rgba(77, 168, 218, 0.35);
+    }
+    .hero .thin { font-weight: 400; color: var(--c-accent); }
+    .summary {
+      position: absolute; left: 120px; top: 505px;
+      font-size: 15pt; line-height: 1.7;
+      color: var(--c-muted);
+      max-width: 520px;
+    }
+    .org {
+      position: absolute; left: 120px; top: 719px;
+      font-size: 18pt; font-weight: 500;
+      color: var(--c-text);
+    }
+    .org-sub {
+      position: absolute; left: 120px; top: 758px;
+      font-size: 11pt; font-weight: 300;
+      color: var(--c-muted);
+      letter-spacing: 1px;
+    }
+    .meta-block {
+      position: absolute; left: 120px; top: 905px;
+      font-size: 10pt; color: var(--c-muted);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      line-height: 2.1;
+    }
+    .meta-block b { color: var(--c-text); font-weight: 500; }
+  </style>
+</head>
+<body>
+  <div class="cover">
+    <div class="layer-bg">
+      <div class="glow-a"></div>
+      <div class="glow-b"></div>
+    </div>
+    <div class="layer-frame">
+      <div class="frame"></div>
+    </div>
+    <div class="layer-content">
+      <div class="kicker">Technical Report &amp; User Guide</div>
+      <div class="hero">BatteryLab<br><span class="thin">Virtual Battery Design</span><br>&amp; Test Platform</div>
+      <div class="summary">
+        A complete walkthrough and engineering reference for the BatteryLab web platform:
+        the seven-step design workflow, the VoltAI copilot, the 2RC electro-thermal
+        simulation engine, and the full system architecture &mdash; frontend, API, physics
+        and data layers.
+      </div>
+      <div class="org">BatteryLab Engineering Reference</div>
+      <div class="org-sub">Design &middot; Connection &middot; Modeling &middot; Simulation &middot; Thermal &middot; Monitor &middot; Analysis</div>
+      <div class="meta-block">
+        <b>October 2026</b> &nbsp;&middot;&nbsp; Version 1.0<br>
+        Next.js 16 &middot; React 19 &middot; Prisma + SQLite &middot; three.js
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,72 @@
+// BatteryLab — battery design & test platform schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model BatteryDesign {
+  id           String   @id @default(cuid())
+  name         String
+  chemistry    String   // NMC | NCA | LFP | LTO | LCO | LeadAcid | NiMH | NiCd
+  brand        String?  // datasheet metadata
+  model        String?
+  formFactor   String?
+  cathode      String?
+  anode        String?
+  separator    String?
+  electrolyte  String?
+  application  String?
+  sourceRef    String?
+  capacityAh   Float
+  nominalV     Float?
+  vmax         Float
+  vmin         Float
+  r0           Float // ohmic resistance (Ohm)
+  r1           Float // polarization resistance (Ohm)
+  c1           Float // polarization capacitance (F)
+  r2           Float // diffusion resistance (Ohm)
+  c2           Float // diffusion capacitance (F)
+  maxDischargeC Float
+  maxPulseDischargeC Float?
+  maxChargeC   Float
+  stdChargeC   Float?
+  diameterMm   Float?
+  lengthMm     Float?
+  widthMm      Float?
+  heightMm     Float?
+  thicknessMm  Float?
+  massKg       Float
+  cpJkgK       Float
+  areaM2       Float
+  entropicVperK Float // dU/dT (V/K)
+  cycleLifeCycles Float?
+  cycleLifeNote String?
+  chargeTempMinC  Float?
+  chargeTempMaxC  Float?
+  dischargeTempMinC Float?
+  dischargeTempMaxC Float?
+  selfDischargePctMonth Float?
+  seriesCount  Int
+  parallelCount Int
+  createdAt    DateTime @default(now())
+  runs         TestRun[]
+}
+
+model TestRun {
+  id         String   @id @default(cuid())
+  designId   String
+  design     BatteryDesign @relation(fields: [designId], references: [id], onDelete: Cascade)
+  name       String
+  profile    String   // discharge | cccv | hppc | drive
+  cRate      Float
+  ambientC   Float
+  hConv      Float
+  summary    String // JSON summary metrics
+  series     String // JSON downsampled time series
+  createdAt  DateTime @default(now())
+}

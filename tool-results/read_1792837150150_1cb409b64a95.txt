@@ -1,0 +1,669 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useMemo, useState } from "react";
+     4→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+     5→import { Button } from "@/components/ui/button";
+     6→import { Input } from "@/components/ui/input";
+     7→import { Label } from "@/components/ui/label";
+     8→import { Badge } from "@/components/ui/badge";
+     9→import {
+    10→  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
+    11→} from "@/components/ui/select";
+    12→import { useToast } from "@/hooks/use-toast";
+    13→import {
+    14→  BatteryCharging, Save, Trash2, FolderOpen, Zap, Weight, Gauge, Sparkles,
+    15→  CheckCircle2, CircleDashed, RotateCcw, BookOpen, Ruler, Thermometer,
+    16→  Activity, TrendingDown,
+    17→} from "lucide-react";
+    18→import {
+    19→  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
+    20→} from "recharts";
+    21→import { useLabStore } from "@/lib/lab/store";
+    22→import {
+    23→  packMath, designIssues, estimateAreaM2, loadedVoltageAtSoc, effectiveCapacityPct,
+    24→  jouleHeatW, tempRiseAdiabatic, type CellDesign, type Chemistry,
+    25→} from "@/lib/lab/engine";
+    26→import { LIBRARY_CELLS, LIBRARY_CATEGORIES, cellToDesign, getLibraryCell, type LibraryCell } from "@/lib/lab/library";
+    27→import { SectionTitle, StatCard, ChartCard, CHART_COLORS } from "./shared";
+    28→
+    29→interface SavedDesign {
+    30→  id: string;
+    31→  name: string;
+    32→  chemistry: string;
+    33→  brand: string | null;
+    34→  model: string | null;
+    35→  formFactor: string | null;
+    36→  cathode: string | null;
+    37→  anode: string | null;
+    38→  separator: string | null;
+    39→  electrolyte: string | null;
+    40→  application: string | null;
+    41→  sourceRef: string | null;
+    42→  capacityAh: number;
+    43→  nominalV: number | null;
+    44→  vmax: number;
+    45→  vmin: number;
+    46→  r0: number;
+    47→  r1: number | null;
+    48→  c1: number | null;
+    49→  r2: number | null;
+    50→  c2: number | null;
+    51→  maxDischargeC: number | null;
+    52→  maxPulseDischargeC: number | null;
+    53→  maxChargeC: number | null;
+    54→  stdChargeC: number | null;
+    55→  diameterMm: number | null;
+    56→  lengthMm: number | null;
+    57→  widthMm: number | null;
+    58→  heightMm: number | null;
+    59→  thicknessMm: number | null;
+    60→  massKg: number;
+    61→  cpJkgK: number | null;
+    62→  areaM2: number | null;
+    63→  entropicVperK: number | null;
+    64→  cycleLifeCycles: number | null;
+    65→  cycleLifeNote: string | null;
+    66→  chargeTempMinC: number | null;
+    67→  chargeTempMaxC: number | null;
+    68→  dischargeTempMinC: number | null;
+    69→  dischargeTempMaxC: number | null;
+    70→  selfDischargePctMonth: number | null;
+    71→  seriesCount: number;
+    72→  parallelCount: number;
+    73→  _count: { runs: number };
+    74→}
+    75→
+    76→const CHEM_OPTIONS: { id: Chemistry; label: string; hint: string }[] = [
+    77→  { id: "NMC", label: "NMC", hint: "Li-ion · high energy · EV / traction" },
+    78→  { id: "NCA", label: "NCA", hint: "Li-ion · very high energy · premium EV" },
+    79→  { id: "LFP", label: "LFP", hint: "Li-ion · safe · flat curve · storage" },
+    80→  { id: "LTO", label: "LTO", hint: "Li-ion · ultra-fast charge · 20k+ cycles" },
+    81→  { id: "LCO", label: "LCO", hint: "Li-ion · compact · consumer electronics" },
+    82→  { id: "LeadAcid", label: "Lead-Acid", hint: "2 V/cell · automotive · backup power" },
+    83→  { id: "NiMH", label: "NiMH", hint: "1.2 V/cell · consumer AA · hybrid vehicles" },
+    84→  { id: "NiCd", label: "NiCd", hint: "1.2 V/cell · rugged industrial (legacy)" },
+    85→];
+    86→
+    87→const FORM_FACTORS = [
+    88→  "Cylindrical 18650", "Cylindrical 21700", "Cylindrical 26650", "Cylindrical 4680",
+    89→  "Prismatic (aluminium can)", "Pouch", "Cylindrical AA (14500-class)",
+    90→  "Cylindrical Sub-C", "Cylindrical D (LR20-class)", "GC2 6V flooded deep-cycle block (3 cells)",
+    91→  "12V AGM VRLA block (6 cells)", "Coin / button", "Custom",
+    92→];
+    93→
+    94→export function DesignTab() {
+    95→  const { design, updateDesign, resetDesign, pack, sendCopilotMessage, copilotBusy } = useLabStore();
+    96→  const { toast } = useToast();
+    97→  const [saved, setSaved] = useState<SavedDesign[]>([]);
+    98→  const [saving, setSaving] = useState(false);
+    99→  const [pickId, setPickId] = useState<string>("");
+   100→
+   101→  const loadSaved = async () => {
+   102→    try {
+   103→      const res = await fetch("/api/designs");
+   104→      const data = await res.json();
+   105→      if (res.ok) setSaved(data.designs);
+   106→    } catch {
+   107→      /* silent */
+   108→    }
+   109→  };
+   110→
+   111→  useEffect(() => {
+   112→    loadSaved();
+   113→  }, []);
+   114→
+   115→  const issues = designIssues(design);
+   116→  const complete = issues.length === 0;
+   117→  const pm = packMath(design, pack);
+   118→  const cellWh = design.capacityAh * (design.nominalV > 0 ? design.nominalV : (design.vmax + design.vmin) / 2 + 0.05);
+   119→  const whKg = design.massKg > 0 ? cellWh / design.massKg : 0;
+   120→
+   121→  const save = async () => {
+   122→    if (!complete) {
+   123→      toast({ title: "Design incomplete", description: "Fill every required field before saving.", variant: "destructive" });
+   124→      return;
+   125→    }
+   126→    setSaving(true);
+   127→    try {
+   128→      const res = await fetch("/api/designs", {
+   129→        method: "POST",
+   130→        headers: { "Content-Type": "application/json" },
+   131→        body: JSON.stringify({ ...design, ...pack }),
+   132→      });
+   133→      const data = await res.json();
+   134→      if (!res.ok) throw new Error(data.error);
+   135→      toast({ title: "Design saved", description: `${design.name} is stored in the database.` });
+   136→      loadSaved();
+   137→    } catch (e) {
+   138→      toast({ title: "Save failed", description: String(e instanceof Error ? e.message : e), variant: "destructive" });
+   139→    } finally {
+   140→      setSaving(false);
+   141→    }
+   142→  };
+   143→
+   144→  const load = (d: SavedDesign) => {
+   145→    const n = (v: number | null | undefined, dflt = 0) => (v === null || v === undefined ? dflt : v);
+   146→    const s = (v: string | null) => v ?? "";
+   147→    const loaded: Partial<CellDesign> = {
+   148→      name: d.name, chemistry: d.chemistry as CellDesign["chemistry"],
+   149→      brand: s(d.brand), model: s(d.model),
+   150→      formFactor: s(d.formFactor), cathode: s(d.cathode), anode: s(d.anode),
+   151→      separator: s(d.separator), electrolyte: s(d.electrolyte), application: s(d.application),
+   152→      sourceRef: s(d.sourceRef),
+   153→      capacityAh: d.capacityAh, nominalV: n(d.nominalV), vmax: d.vmax, vmin: d.vmin, r0: d.r0,
+   154→      r1: n(d.r1), c1: n(d.c1), r2: n(d.r2), c2: n(d.c2),
+   155→      maxDischargeC: n(d.maxDischargeC), maxPulseDischargeC: n(d.maxPulseDischargeC),
+   156→      maxChargeC: n(d.maxChargeC), stdChargeC: n(d.stdChargeC),
+   157→      diameterMm: n(d.diameterMm), lengthMm: n(d.lengthMm), widthMm: n(d.widthMm),
+   158→      heightMm: n(d.heightMm), thicknessMm: n(d.thicknessMm), massKg: d.massKg,
+   159→      cpJkgK: n(d.cpJkgK), areaM2: n(d.areaM2), entropicVperK: n(d.entropicVperK, 0.0001),
+   160→      cycleLifeCycles: n(d.cycleLifeCycles), cycleLifeNote: s(d.cycleLifeNote),
+   161→      chargeTempMinC: n(d.chargeTempMinC), chargeTempMaxC: n(d.chargeTempMaxC),
+   162→      dischargeTempMinC: n(d.dischargeTempMinC), dischargeTempMaxC: n(d.dischargeTempMaxC),
+   163→      selfDischargePctMonth: n(d.selfDischargePctMonth),
+   164→    };
+   165→    updateDesign(loaded);
+   166→    useLabStore.getState().setPack({ series: d.seriesCount, parallel: d.parallelCount });
+   167→    toast({ title: "Design loaded", description: `${d.name} — all saved values restored.` });
+   168→  };
+   169→
+   170→  const remove = async (id: string) => {
+   171→    try {
+   172→      await fetch(`/api/designs/${id}`, { method: "DELETE" });
+   173→      loadSaved();
+   174→      toast({ title: "Design deleted" });
+   175→    } catch {
+   176→      toast({ title: "Delete failed", variant: "destructive" });
+   177→    }
+   178→  };
+   179→
+   180→  const askAi = (prompt: string) => sendCopilotMessage(prompt);
+   181→
+   182→  const pickCell = (id: string) => {
+   183→    setPickId(id);
+   184→    const cell = getLibraryCell(id);
+   185→    if (!cell) return;
+   186→    useLabStore.getState().loadLibraryCell(cell);
+   187→    toast({
+   188→      title: "Datasheet loaded",
+   189→      description: `${cell.brand} ${cell.model} — every value below is now editable.`,
+   190→    });
+   191→  };
+   192→
+   193→  return (
+   194→    <div className="space-y-6">
+   195→      <SectionTitle
+   196→        icon={<BatteryCharging className="h-5 w-5" />}
+   197→        title="1 · Battery Design"
+   198→        desc="Every input needed to define your cell — start from a real datasheet or a blank sheet."
+   199→      />
+   200→
+   201→      {/* Starting point: blank or from datasheet */}
+   202→      <Card className="border-primary/30 bg-primary/[0.03]">
+   203→        <CardContent className="p-4 flex flex-col lg:flex-row lg:items-center gap-3">
+   204→          <div className="flex-1">
+   205→            <div className="text-sm font-medium flex items-center gap-2">
+   206→              <BookOpen className="h-4 w-4 text-primary" /> Starting point
+   207→            </div>
+   208→            <p className="text-xs text-muted-foreground mt-0.5">
+   209→              Pre-fill every field from {LIBRARY_CELLS.length} real datasheets, or start blank — loaded values stay editable.
+   210→            </p>
+   211→          </div>
+   212→          <div className="flex flex-col sm:flex-row gap-2 lg:w-[520px]">
+   213→            <Select value={pickId} onValueChange={pickCell}>
+   214→              <SelectTrigger className="h-9 flex-1" aria-label="Pick a datasheet as starting point">
+   215→                <SelectValue placeholder="Load from datasheet…" />
+   216→              </SelectTrigger>
+   217→              <SelectContent>
+   218→                {LIBRARY_CATEGORIES.map((cat) => {
+   219→                  const cells = LIBRARY_CELLS.filter((c) => c.category === cat);
+   220→                  if (cells.length === 0) return null;
+   221→                  return (
+   222→                    <SelectGroup key={cat}>
+   223→                      <SelectLabel>{cat}</SelectLabel>
+   224→                      {cells.map((c: LibraryCell) => (
+   225→                        <SelectItem key={c.id} value={c.id}>
+   226→                          {c.brand} — {c.model} ({c.capacityAh} Ah / {c.nominalV} V)
+   227→                        </SelectItem>
+   228→                      ))}
+   229→                    </SelectGroup>
+   230→                  );
+   231→                })}
+   232→              </SelectContent>
+   233→            </Select>
+   234→            <Button variant="outline" onClick={() => { resetDesign(); setPickId(""); toast({ title: "Design reset to blank sheet" }); }}>
+   235→              <RotateCcw className="h-3.5 w-3.5 mr-1" /> Blank sheet
+   236→            </Button>
+   237→          </div>
+   238→        </CardContent>
+   239→      </Card>
+   240→
+   241→      {/* Completeness checklist */}
+   242→      <Card className={complete ? "border-primary/40 bg-primary/[0.04]" : ""}>
+   243→        <CardContent className="p-4">
+   244→          <div className="flex items-center justify-between gap-3">
+   245→            <div className="text-sm font-medium flex items-center gap-2">
+   246→              {complete ? (
+   247→                <><CheckCircle2 className="h-4 w-4 text-primary" /> Core definition complete — next: Connection, then Simulation</>
+   248→              ) : (
+   249→                <><CircleDashed className="h-4 w-4 text-amber-600" /> Design checklist — {issues.length} to go</>
+   250→              )}
+   251→            </div>
+   252→            {design.sourceRef ? (
+   253→              <Badge variant="outline" className="text-[10px] max-w-[280px] truncate">{design.sourceRef}</Badge>
+   254→            ) : null}
+   255→          </div>
+   256→          {!complete && (
+   257→            <ul className="grid sm:grid-cols-2 gap-x-4 gap-y-1 mt-2">
+   258→              {issues.map((i) => (
+   259→                <li key={i} className="text-xs text-muted-foreground flex items-center gap-1.5">
+   260→                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" /> {i}
+   261→                </li>
+   262→              ))}
+   263→            </ul>
+   264→          )}
+   265→        </CardContent>
+   266→      </Card>
+   267→      <div className="flex flex-wrap gap-2">
+   268→        <button
+   269→          onClick={() => askAi("I'm starting from a blank sheet. Guide me step by step — first ask me what I'm building.")}
+   270→          disabled={copilotBusy}
+   271→          className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+   272→        >
+   273→          <Sparkles className="h-3.5 w-3.5" /> Guide me from zero
+   274→        </button>
+   275→        <button
+   276→          onClick={() => askAi("Recommend a real cell from the Cell Library for my application and explain why, with the apply block so I can load it.")}
+   277→          disabled={copilotBusy}
+   278→          className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+   279→        >
+   280→          <Sparkles className="h-3.5 w-3.5" /> Recommend a real cell
+   281→        </button>
+   282→        <button
+   283→          onClick={() => askAi("Suggest a complete cell parameter set for my application (I'll describe it next), including the apply block so I can load it with one click.")}
+   284→          disabled={copilotBusy}
+   285→          className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+   286→        >
+   287→          <Sparkles className="h-3.5 w-3.5" /> Suggest values for my application
+   288→        </button>
+   289→        <button
+   290→          onClick={() => askAi("Review my current cell parameters and warn me about anything unsafe or unrealistic.")}
+   291→          disabled={copilotBusy}
+   292→          className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+   293→        >
+   294→          <Sparkles className="h-3.5 w-3.5" /> Review my numbers
+   295→        </button>
+   296→      </div>
+   297→
+   298→      {/* ===== Input sections ===== */}
+   299→      <div className="grid lg:grid-cols-2 gap-4">
+   300→        {/* Identity & materials */}
+   301→        <Card>
+   302→          <CardHeader className="pb-2">
+   303→            <CardTitle className="text-sm flex items-center gap-2"><BatteryCharging className="h-4 w-4 text-primary" /> Identity &amp; materials</CardTitle>
+   304→            <CardDescription>What the battery is and what it&apos;s made of</CardDescription>
+   305→          </CardHeader>
+   306→          <CardContent className="grid grid-cols-2 gap-3">
+   307→            <div className="col-span-2">
+   308→              <Label htmlFor="dname">Design name</Label>
+   309→              <Input id="dname" className="mt-1" placeholder="e.g. My 21700 traction cell" value={design.name} onChange={(e) => updateDesign({ name: e.target.value })} />
+   310→            </div>
+   311→            <div>
+   312→              <TextField label="Brand (based on)" value={design.brand} placeholder="e.g. Samsung SDI" onChange={(v) => updateDesign({ brand: v })} />
+   313→            </div>
+   314→            <div>
+   315→              <TextField label="Model (based on)" value={design.model} placeholder="e.g. INR21700-40T" onChange={(v) => updateDesign({ model: v })} />
+   316→            </div>
+   317→            <div className="col-span-2">
+   318→              <Label className="text-xs text-muted-foreground">Chemistry (OCV curve family)</Label>
+   319→              <Select value={design.chemistry} onValueChange={(v) => updateDesign({ chemistry: v as Chemistry })}>
+   320→                <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+   321→                <SelectContent>
+   322→                  {CHEM_OPTIONS.map((c) => (
+   323→                    <SelectItem key={c.id} value={c.id}>
+   324→                      <span className="font-medium">{c.label}</span>
+   325→                      <span className="text-muted-foreground text-xs"> — {c.hint}</span>
+   326→                    </SelectItem>
+   327→                  ))}
+   328→                </SelectContent>
+   329→              </Select>
+   330→            </div>
+   331→            <div className="col-span-2">
+   332→              <Label className="text-xs text-muted-foreground">Form factor</Label>
+   333→              <Select value={design.formFactor} onValueChange={(v) => updateDesign({ formFactor: v })}>
+   334→                <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Select or leave custom" /></SelectTrigger>
+   335→                <SelectContent>
+   336→                  {FORM_FACTORS.map((f) => (
+   337→                    <SelectItem key={f} value={f}>{f}</SelectItem>
+   338→                  ))}
+   339→                </SelectContent>
+   340→              </Select>
+   341→            </div>
+   342→            <TextField label="Cathode (+) material" value={design.cathode} placeholder="e.g. NMC 811, LiFePO₄" onChange={(v) => updateDesign({ cathode: v })} />
+   343→            <TextField label="Anode (−) material" value={design.anode} placeholder="e.g. Graphite + SiOx" onChange={(v) => updateDesign({ anode: v })} />
+   344→            <TextField label="Separator" value={design.separator} placeholder="e.g. PE/PP microporous" onChange={(v) => updateDesign({ separator: v })} />
+   345→            <TextField label="Electrolyte" value={design.electrolyte} placeholder="e.g. LiPF₆ carbonate" onChange={(v) => updateDesign({ electrolyte: v })} />
+   346→            <div className="col-span-2">
+   347→              <TextField label="Target application" value={design.application} placeholder="e.g. e-bike pack, home storage, drone" onChange={(v) => updateDesign({ application: v })} />
+   348→            </div>
+   349→          </CardContent>
+   350→        </Card>
+   351→
+   352→        {/* Geometry & mass */}
+   353→        <Card>
+   354→          <CardHeader className="pb-2">
+   355→            <CardTitle className="text-sm flex items-center gap-2"><Ruler className="h-4 w-4 text-primary" /> Format, geometry &amp; mass</CardTitle>
+   356→            <CardDescription>Physical envelope — also used to estimate surface area for thermal testing</CardDescription>
+   357→          </CardHeader>
+   358→          <CardContent className="grid grid-cols-2 gap-3">
+   359→            <NumField label="Diameter Ø (mm)" value={design.diameterMm} step={0.05} min={0} onChange={(v) => updateDesign({ diameterMm: v })} hint="cylindrical cells" />
+   360→            <NumField label="Length / height (mm)" value={design.lengthMm} step={0.1} min={0} onChange={(v) => updateDesign({ lengthMm: v })} hint="cylinder length" />
+   361→            <NumField label="Width (mm)" value={design.widthMm} step={0.1} min={0} onChange={(v) => updateDesign({ widthMm: v })} hint="prismatic" />
+   362→            <NumField label="Height (mm)" value={design.heightMm} step={0.1} min={0} onChange={(v) => updateDesign({ heightMm: v })} hint="prismatic" />
+   363→            <NumField label="Thickness (mm)" value={design.thicknessMm} step={0.1} min={0} onChange={(v) => updateDesign({ thicknessMm: v })} hint="pouch" />
+   364→            <NumField label="Mass (g)" value={design.massKg * 1000} step={0.1} min={0} onChange={(v) => updateDesign({ massKg: v / 1000 })} hint={`${(design.massKg * 1000).toFixed(1)} g total`} />
+   365→            <div className="col-span-2 flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2">
+   366→              <p className="text-xs text-muted-foreground">
+   367→                Estimated from dimensions: {estimateAreaM2(design) > 0 ? <span className="font-medium text-foreground">{(estimateAreaM2(design) * 10000).toFixed(0)} cm²</span> : "add dimensions"}
+   368→              </p>
+   369→              <Button
+   370→                size="sm" variant="outline"
+   371→                disabled={estimateAreaM2(design) <= 0}
+   372→                onClick={() => {
+   373→                  const a = estimateAreaM2(design);
+   374→                  if (a > 0) { updateDesign({ areaM2: a }); toast({ title: "Surface area estimated", description: `${(a * 10000).toFixed(0)} cm² from your dimensions.` }); }
+   375→                }}
+   376→              >
+   377→                <Ruler className="h-3.5 w-3.5 mr-1" /> Apply estimate
+   378→              </Button>
+   379→            </div>
+   380→          </CardContent>
+   381→        </Card>
+   382→
+   383→        {/* Electrical ratings */}
+   384→        <Card>
+   385→          <CardHeader className="pb-2">
+   386→            <CardTitle className="text-sm flex items-center gap-2"><Gauge className="h-4 w-4 text-primary" /> Electrical ratings</CardTitle>
+   387→            <CardDescription>Everything the datasheet front page lists</CardDescription>
+   388→          </CardHeader>
+   389→          <CardContent className="grid grid-cols-2 gap-3">
+   390→            <NumField label="Capacity (Ah)" value={design.capacityAh} step={0.1} min={0} onChange={(v) => updateDesign({ capacityAh: v })} />
+   391→            <NumField label="Nominal voltage (V)" value={design.nominalV} step={0.05} min={0} onChange={(v) => updateDesign({ nominalV: v })} hint="e.g. 3.6 / 3.2 / 1.2" />
+   392→            <NumField label="V max — charge cutoff (V)" value={design.vmax} step={0.05} min={0} onChange={(v) => updateDesign({ vmax: v })} />
+   393→            <NumField label="V min — discharge cutoff (V)" value={design.vmin} step={0.05} min={0} onChange={(v) => updateDesign({ vmin: v })} />
+   394→            <NumField label="R₀ ohmic (mΩ)" value={design.r0 * 1000} step={0.1} min={0} onChange={(v) => updateDesign({ r0: v / 1000 })} hint="AC IR @1 kHz" />
+   395→            <NumField label="Std charge (C)" value={design.stdChargeC} step={0.05} min={0} onChange={(v) => updateDesign({ stdChargeC: v })} />
+   396→            <NumField label="Max discharge cont. (C)" value={design.maxDischargeC} step={0.5} min={0} onChange={(v) => updateDesign({ maxDischargeC: v })} />
+   397→            <NumField label="Max pulse discharge (C)" value={design.maxPulseDischargeC} step={0.5} min={0} onChange={(v) => updateDesign({ maxPulseDischargeC: v })} hint="0 = n/a" />
+   398→            <NumField label="Max charge (C)" value={design.maxChargeC} step={0.5} min={0} onChange={(v) => updateDesign({ maxChargeC: v })} />
+   399→            <div className="col-span-2 text-xs text-muted-foreground">
+   400→              1C ≈ {design.capacityAh > 0 ? `${design.capacityAh.toFixed(1)} A` : "—"} per cell.
+   401→            </div>
+   402→          </CardContent>
+   403→        </Card>
+   404→
+   405→        {/* Temperature & durability */}
+   406→        <Card>
+   407→          <CardHeader className="pb-2">
+   408→            <CardTitle className="text-sm flex items-center gap-2"><Thermometer className="h-4 w-4 text-primary" /> Temperature limits &amp; durability</CardTitle>
+   409→            <CardDescription>Operating window and cycle-life targets from the datasheet</CardDescription>
+   410→          </CardHeader>
+   411→          <CardContent className="grid grid-cols-2 gap-3">
+   412→            <NumField label="Charge temp min (°C)" value={design.chargeTempMinC} step={1} onChange={(v) => updateDesign({ chargeTempMinC: v })} hint="often 0 °C" />
+   413→            <NumField label="Charge temp max (°C)" value={design.chargeTempMaxC} step={1} onChange={(v) => updateDesign({ chargeTempMaxC: v })} hint="often 45 °C" />
+   414→            <NumField label="Discharge temp min (°C)" value={design.dischargeTempMinC} step={1} onChange={(v) => updateDesign({ dischargeTempMinC: v })} hint="often −20 °C" />
+   415→            <NumField label="Discharge temp max (°C)" value={design.dischargeTempMaxC} step={1} onChange={(v) => updateDesign({ dischargeTempMaxC: v })} hint="often 60 °C" />
+   416→            <NumField label="Cycle life (cycles)" value={design.cycleLifeCycles} step={50} min={0} onChange={(v) => updateDesign({ cycleLifeCycles: v })} />
+   417→            <NumField label="Self-discharge (%/month)" value={design.selfDischargePctMonth} step={0.1} min={0} onChange={(v) => updateDesign({ selfDischargePctMonth: v })} />
+   418→            <div className="col-span-2">
+   419→              <TextField label="Cycle-life condition (note)" value={design.cycleLifeNote} placeholder="e.g. 500 cycles to 80% @ 0.5C, 25°C" onChange={(v) => updateDesign({ cycleLifeNote: v })} />
+   420→            </div>
+   421→          </CardContent>
+   422→        </Card>
+   423→      </div>
+   424→
+   425→      <div className="grid lg:grid-cols-3 gap-4">
+   426→        {/* Thermal model */}
+   427→        <Card>
+   428→          <CardHeader className="pb-2">
+   429→            <CardTitle className="text-sm flex items-center gap-2"><Weight className="h-4 w-4 text-primary" /> Thermal model inputs</CardTitle>
+   430→            <CardDescription>Drives the Bernardi heat model in thermal testing</CardDescription>
+   431→          </CardHeader>
+   432→          <CardContent className="grid grid-cols-2 gap-3">
+   433→            <NumField label="Mass (kg)" value={design.massKg} step={0.001} min={0} onChange={(v) => updateDesign({ massKg: v })} />
+   434→            <NumField label="Cp (J/kg·K)" value={design.cpJkgK} step={10} min={0} onChange={(v) => updateDesign({ cpJkgK: v })} hint="typ. 900–1200" />
+   435→            <NumField label="Surface area (cm²)" value={design.areaM2 * 10000} step={1} min={0} onChange={(v) => updateDesign({ areaM2: v / 10000 })} />
+   436→            <NumField label="dU/dT (mV/K)" value={design.entropicVperK * 1000} step={0.05} onChange={(v) => updateDesign({ entropicVperK: v / 1000 })} hint="entropic coeff." />
+   437→          </CardContent>
+   438→        </Card>
+   439→
+   440→        {/* KPIs */}
+   441→        <Card>
+   442→          <CardHeader className="pb-2">
+   443→            <CardTitle className="text-sm flex items-center gap-2"><Zap className="h-4 w-4 text-primary" /> Live cell KPIs</CardTitle>
+   444→            <CardDescription>Update as you type</CardDescription>
+   445→          </CardHeader>
+   446→          <CardContent className="grid grid-cols-2 gap-3">
+   447→            <StatCard label="Cell energy" value={cellWh > 0 ? +cellWh.toFixed(1) : "—"} unit={cellWh > 0 ? "Wh" : undefined} />
+   448→            <StatCard label="Energy density" value={whKg > 0 ? whKg.toFixed(0) : "—"} unit={whKg > 0 ? "Wh/kg" : undefined} />
+   449→            <StatCard label="1C current" value={design.capacityAh > 0 ? design.capacityAh.toFixed(1) : "—"} unit={design.capacityAh > 0 ? "A" : undefined} />
+   450→            <StatCard label="Voltage window" value={design.vmin > 0 ? `${design.vmin}–${design.vmax}` : "—"} unit={design.vmin > 0 ? "V" : undefined} />
+   451→            <StatCard label="Pack preview" value={pm.packEnergyWh > 0 ? pm.packEnergyWh : "—"} unit={pm.packEnergyWh > 0 ? "Wh" : undefined} hint={`${pack.series}S${pack.parallel}P`} />
+   452→            <StatCard label="Pack spec. energy" value={pm.gravimetricWhKg > 0 ? pm.gravimetricWhKg : "—"} unit={pm.gravimetricWhKg > 0 ? "Wh/kg" : undefined} hint="incl. 25% structure" />
+   453→          </CardContent>
+   454→        </Card>
+   455→
+   456→        {/* Save + library */}
+   457→        <Card>
+   458→          <CardHeader className="pb-2">
+   459→            <CardTitle className="text-sm flex items-center gap-2"><FolderOpen className="h-4 w-4 text-primary" /> Design library</CardTitle>
+   460→            <CardDescription>Save your finished design to the database, then reuse it in later tests</CardDescription>
+   461→          </CardHeader>
+   462→          <CardContent className="space-y-3">
+   463→            <Button onClick={save} disabled={saving} className="bg-primary hover:bg-primary/90">
+   464→              <Save className="h-4 w-4 mr-1.5" /> {saving ? "Saving…" : "Save design"}
+   465→            </Button>
+   466→            {saved.length === 0 ? (
+   467→              <p className="text-sm text-muted-foreground">No saved designs yet — define your cell above and press Save.</p>
+   468→            ) : (
+   469→              <div className="max-h-64 overflow-y-auto rounded-lg border divide-y">
+   470→                {saved.map((d) => (
+   471→                  <div key={d.id} className="flex items-center justify-between px-3 py-2 text-sm hover:bg-muted/50">
+   472→                    <div className="min-w-0">
+   473→                      <div className="font-medium truncate">{d.name}</div>
+   474→                      <div className="text-xs text-muted-foreground">
+   475→                        {d.chemistry} · {d.capacityAh} Ah · {d.seriesCount}S{d.parallelCount}P · {d._count.runs} run(s)
+   476→                      </div>
+   477→                    </div>
+   478→                    <div className="flex gap-1 shrink-0">
+   479→                      <Button size="sm" variant="outline" onClick={() => load(d)}>Load</Button>
+   480→                      <Button size="sm" variant="ghost" onClick={() => remove(d.id)} aria-label={`Delete ${d.name}`}>
+   481→                        <Trash2 className="h-4 w-4 text-red-500" />
+   482→                      </Button>
+   483→                    </div>
+   484→                  </div>
+   485→                ))}
+   486→              </div>
+   487→            )}
+   488→          </CardContent>
+   489→        </Card>
+   490→      </div>
+   491→
+   492→      {/* ===== Real-World Preview (datasheet-driven) ===== */}
+   493→      <RealWorldPreview />
+   494→    </div>
+   495→  );
+   496→}
+   497→
+   498→// ------------------------------------------------------------
+   499→// Real-world condition preview — computed live from the
+   500→// datasheet values the user entered (OCV curve + R0 + mass).
+   501→// ------------------------------------------------------------
+   502→
+   503→function RealWorldPreview() {
+   504→  const design = useLabStore((s) => s.design);
+   505→  const ready = design.capacityAh > 0 && design.r0 > 0 && design.vmin > 0 && design.vmax > design.vmin;
+   506→  const maxC = Math.min(design.maxDischargeC > 0 ? design.maxDischargeC : 3, 12);
+   507→
+   508→  // Loaded voltage vs SOC at several C-rates
+   509→  const sagData = useMemo(() => {
+   510→    if (!ready) return [];
+   511→    const rates = [0.25, 0.5, 1, 2, maxC].filter((r, i, arr) => arr.indexOf(r) === i).sort((a, b) => a - b);
+   512→    const pts: { soc: number; [k: string]: number }[] = [];
+   513→    for (let soc = 100; soc >= 0; soc -= 2) {
+   514→      const row: { soc: number; [k: string]: number } = { soc };
+   515→      for (const r of rates) row[`${r}C`] = +loadedVoltageAtSoc(design, soc / 100, r).toFixed(3);
+   516→      pts.push(row);
+   517→    }
+   518→    return pts;
+   519→  }, [design, ready, maxC]);
+   520→
+   521→  // Effective capacity vs C-rate
+   522→  const effData = useMemo(() => {
+   523→    if (!ready) return [];
+   524→    const pts: { cRate: number; usable: number | null }[] = [];
+   525→    const step = maxC <= 2 ? 0.1 : 0.25;
+   526→    for (let c = 0.1; c <= maxC + 1e-9; c += step) {
+   527→      pts.push({ cRate: +c.toFixed(2), usable: effectiveCapacityPct(design, +c.toFixed(2)) });
+   528→    }
+   529→    pts.push({ cRate: +maxC.toFixed(2), usable: effectiveCapacityPct(design, maxC) });
+   530→    return pts;
+   531→  }, [design, ready, maxC]);
+   532→
+   533→  // voltage sag at 1C: pure ohmic drop I·R0 (1C current = capacity in amps)
+   534→  const sag1C = ready ? design.capacityAh * design.r0 * 1000 : 0;
+   535→  const heatMax = jouleHeatW(design, maxC);
+   536→  const dT30 = tempRiseAdiabatic(design, maxC, 1800);
+   537→  const runtime1C = ready ? +(60 * (effectiveCapacityPct(design, 1) ?? 0) / 100).toFixed(0) : null;
+   538→  const usableAtMax = ready ? effectiveCapacityPct(design, maxC) : null;
+   539→
+   540→  if (!ready) {
+   541→    return (
+   542→      <Card>
+   543→        <CardHeader className="pb-2">
+   544→          <CardTitle className="text-sm flex items-center gap-2"><Activity className="h-4 w-4 text-primary" /> Real-World Preview</CardTitle>
+   545→          <CardDescription>Enter capacity, R₀ and the voltage window to activate the preview.</CardDescription>
+   546→        </CardHeader>
+   547→      </Card>
+   548→    );
+   549→  }
+   550→
+   551→  return (
+   552→    <Card>
+   553→      <CardHeader className="pb-2">
+   554→        <CardTitle className="text-sm flex items-center gap-2"><Activity className="h-4 w-4 text-primary" /> Real-World Preview</CardTitle>
+   555→        <CardDescription>
+   556→          Live from your values — ohmic estimate; full electro-thermal runs in Simulation.
+   557→        </CardDescription>
+   558→      </CardHeader>
+   559→      <CardContent className="space-y-4">
+   560→        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   561→          <StatCard
+   562→            label="Sag @1C (ohmic)"
+   563→            value={sag1C.toFixed(0)} unit="mV"
+   564→            hint="V drop below OCV from I·R₀"
+   565→          />
+   566→          <StatCard
+   567→            label={`Heat @ ${maxC}C`}
+   568→            value={heatMax ?? "—"} unit={heatMax != null ? "W" : undefined}
+   569→            hint="I²·R₀ joule heating"
+   570→            tone={heatMax != null && heatMax > 5 ? "warn" : "default"}
+   571→          />
+   572→          <StatCard
+   573→            label={`ΔT @ ${maxC}C, 30 min`}
+   574→            value={dT30 ?? "—"} unit={dT30 != null ? "°C" : undefined}
+   575→            hint="adiabatic estimate"
+   576→            tone={dT30 != null && dT30 > 25 ? "fail" : dT30 != null && dT30 > 10 ? "warn" : "default"}
+   577→          />
+   578→          <StatCard
+   579→            label="Runtime @ 1C → Vmin"
+   580→            value={runtime1C != null && runtime1C > 0 ? runtime1C : "—"} unit={runtime1C != null && runtime1C > 0 ? "min" : undefined}
+   581→            hint="full charge to cutoff"
+   582→          />
+   583→        </div>
+   584→
+   585→        <div className="grid lg:grid-cols-2 gap-4">
+   586→          <ChartCard title="Loaded voltage vs SOC — voltage sag under real loads">
+   587→            <ResponsiveContainer width="100%" height="100%">
+   588→              <LineChart data={sagData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+   589→                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+   590→                <XAxis dataKey="soc" tick={{ fontSize: 11 }} unit="%" />
+   591→                <YAxis domain={["auto", "auto"]} tick={{ fontSize: 11 }} unit=" V" />
+   592→                <Tooltip formatter={(v: number | string) => [`${v} V`, ""]} labelFormatter={(l) => `SOC ${l}%`} />
+   593→                <Legend wrapperStyle={{ fontSize: 11 }} />
+   594→                <ReferenceLine y={design.vmin} stroke={CHART_COLORS.red} strokeDasharray="4 4" label={{ value: "Vmin", fontSize: 10, fill: CHART_COLORS.red }} />
+   595→                {[0.25, 0.5, 1, 2, maxC].filter((r, i, a) => a.indexOf(r) === i).map((r, i) => (
+   596→                  <Line
+   597→                    key={r}
+   598→                    type="monotone" dataKey={`${r}C`} name={`${r}C (${(r * design.capacityAh).toFixed(1)} A)`}
+   599→                    stroke={[CHART_COLORS.blue, CHART_COLORS.cyan, CHART_COLORS.slate, CHART_COLORS.amber, CHART_COLORS.red][i % 5]}
+   600→                    strokeWidth={2} dot={false}
+   601→                  />
+   602→                ))}
+   603→              </LineChart>
+   604→            </ResponsiveContainer>
+   605→          </ChartCard>
+   606→
+   607→          <ChartCard title="Usable capacity vs C-rate — real-world derating">
+   608→            <ResponsiveContainer width="100%" height="100%">
+   609→              <LineChart data={effData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+   610→                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+   611→                <XAxis dataKey="cRate" tick={{ fontSize: 11 }} unit="C" />
+   612→                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+   613→                <Tooltip formatter={(v: number | string) => [`${v} %`, "usable"]} labelFormatter={(l) => `${l}C`} />
+   614→                <Legend wrapperStyle={{ fontSize: 11 }} />
+   615→                <Line type="monotone" dataKey="usable" name="Usable capacity" stroke={CHART_COLORS.cyan} strokeWidth={2.5} dot={false} />
+   616→              </LineChart>
+   617→            </ResponsiveContainer>
+   618→          </ChartCard>
+   619→        </div>
+   620→
+   621→        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+   622→          <TrendingDown className="h-3.5 w-3.5 text-primary shrink-0" />
+   623→          <span>≈<span className="font-semibold text-foreground">{usableAtMax ?? "—"}%</span> of rated capacity is usable at {maxC}C before the loaded voltage hits Vmin.</span>
+   624→        </div>
+   625→      </CardContent>
+   626→    </Card>
+   627→  );
+   628→}
+   629→
+   630→// ------------------------------------------------------------
+   631→// Field helpers
+   632→// ------------------------------------------------------------
+   633→
+   634→function NumField({ label, value, step, min, onChange, hint }: { label: string; value: number; step: number; min?: number; onChange: (v: number) => void; hint?: string }) {
+   635→  return (
+   636→    <div>
+   637→      <Label className="text-xs text-muted-foreground">{label}</Label>
+   638→      <Input
+   639→        className="mt-1 h-8"
+   640→        type="number"
+   641→        value={value || ""}
+   642→        placeholder="0"
+   643→        step={step}
+   644→        min={min}
+   645→        onChange={(e) => {
+   646→          const v = parseFloat(e.target.value);
+   647→          if (!isNaN(v)) onChange(v);
+   648→          else if (e.target.value === "") onChange(0);
+   649→        }}
+   650→      />
+   651→      {hint && <p className="text-[10px] text-muted-foreground mt-0.5">{hint}</p>}
+   652→    </div>
+   653→  );
+   654→}
+   655→
+   656→function TextField({ label, value, placeholder, onChange }: { label: string; value: string; placeholder?: string; onChange: (v: string) => void }) {
+   657→  return (
+   658→    <div>
+   659→      <Label className="text-xs text-muted-foreground">{label}</Label>
+   660→      <Input
+   661→        className="mt-1 h-8"
+   662→        value={value}
+   663→        placeholder={placeholder}
+   664→        onChange={(e) => onChange(e.target.value)}
+   665→      />
+   666→    </div>
+   667→  );
+   668→}
+   669→
