@@ -233,43 +233,8 @@ Voltage, capacity and cell count match exactly. The 1.6% energy gap probably com
 
 The engine itself was also checked against hand calculations during development: a 1C discharge of a 2.5 Ah cell draws 2.5 A with matching throughput, CC-CV holds exactly 4.20 V and ends at the C/20 taper, a 4C adiabatic test aborts at 130 °C, steady-state delta-T of a forced-air run matches Q/(hA), and a 13S pack plateaus at 13 × 4.2 = 54.6 V.
 
-## Installation and Development
 
-> **TODO:** replace the commands below with your project's real setup steps.
 
-```bash
-# Clone the repository
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
-
-# Install dependencies
-npm install
-
-# Start the development server
-npm run dev
-```
-
-Then open the app in your browser. For live hardware monitoring, use Chrome or Edge over HTTPS or `localhost` (required by the Web Serial API).
-
-## Project Structure
-
-> **TODO:** adjust to match your repo layout. The only path confirmed by the report is the engine.
-
-```
-src/
-└── lib/
-    └── lab/
-        └── engine.ts     # 2-RC + Bernardi simulation engine
-```
-
-## License
-
-> **TODO:** add your license (e.g. MIT) and a `LICENSE` file.
-
----
-
-*BatteryLab Technical Report and User Guide, Version 1.0, October 2026.*
-git clone <project> && cd batterylab
 bun install
 bunx prisma generate
 bunx prisma db push
