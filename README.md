@@ -118,10 +118,6 @@ The logbook for all experiments: number of runs, total pack energy, total heat, 
 
 VoltAI is available on every tab from the button at the bottom right. It is not a general chatbot: each message carries a snapshot of the current workspace (active tab, full cell design with validation issues, pack configuration and targets, simulation settings, and the summary and safety checks of the last run). That lets it answer about the battery you are working on, for example checking a heat calculation against your actual current and resistance, or explaining why a run showed a particular regen recovery.
 
-**Apply patch**: when you ask for a concrete change (e.g. "recommend a cell for a 48V 10Ah e-bike pack" or "make it LFP and double the capacity"), the model ends its answer with a fenced JSON block following the `__apply` convention. The app reads the last such block and passes it through a strict sanitiser that keeps only known field names, converts types, limits pack sizes to sensible ranges and drops everything else. An **Apply** button then appears on the chat message; pressing it updates the design and pack state just as if you had typed the values.
-
-Conversations stay in memory only and are never written to the database.
-
 ## Physics and Simulation Engine
 
 The engine lives in `src/lib/lab/engine.ts`: about 670 lines of dependency-free TypeScript. It runs on the server for every simulation request and is **deterministic**, so identical inputs always give identical series, which makes replay, comparison and regression testing meaningful.
