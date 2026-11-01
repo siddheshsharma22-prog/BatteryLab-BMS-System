@@ -1,3 +1,12 @@
+<div align="center">
+
+![Status](https://img.shields.io/badge/version-1.0-blue) ![TypeScript](https://img.shields.io/badge/built%20with-TypeScript-3178c6) ![Chemistries](https://img.shields.io/badge/chemistries-8-green) ![Datasheets](https://img.shields.io/badge/datasheets-10%2C000%2B-orange)
+
+⚡ **Design · Simulate · Monitor · Analyze, all in your browser** ⚡
+
+[Quick Start](#quick-start) · [Workflow](#the-seven-step-workflow) · [VoltAI](#voltai-copilot) · [Physics](#physics-and-simulation-engine) · [Validation](#validation-against-a-real-pack)
+
+</div>
 # BatteryLab - BMS System
 
 Battery Management System (BMS) telemetry, configuration, and monitoring platform.
